@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEONBLOCKS // Tetris</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#07090f;
+    --panel:#0d1220;
+    --panel-line:#1c2440;
+    --grid-line:#141a2c;
+    --cyan:#3ef2e0;
+    --magenta:#ff3ec8;
+    --amber:#ffb020;
+    --violet:#8a5cff;
+    --text:#d7e0ff;
+    --text-dim:#5b6ad4;
+    --text-muted:#6a7396;
+    --danger:#ff4d5e;
+    --success:#43ffa0;
+  }
+
+  *{ box-sizing:border-box; }
+
+  html,body{
+    margin:0;
+    padding:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Space Mono', monospace;
+    min-height:100vh;
+  }
+
+  body{
+    display:flex;
+    align-items:flex-start;
+    justify-content:center;
+    padding:28px 16px 60px;
+    position:relative;
+    overflow-x:hidden;
+  }
+
+  /* ambient background grid + glow */
+  body::before{
+    content:"";
+    position:fixed;
+    inset:0;
+    background-image:
+      linear-gradient(rgba(62,242,224,0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(62,242,224,0.035) 1px, transparent 1px);
+    background-size: 42px 42px;
+    pointer-events:none;
+    z-index:0;
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 20%, black 40%, transparent 90%);
+  }
+  body::after{
+    content:"";
+    position:fixed;
+    inset:0;
+    pointer-events:none;
+    z-index:0;
+    background: radial-gradient(ellipse 60% 40% at 15% 0%, rgba(138,92,255,0.10), transparent 60%),
+                radial-gradient(ellipse 50% 40% at 100% 10%, rgba(255,62,200,0.08), transparent 60%);
+  }
+
+  .scanlines{
+    position:fixed;
+    inset:0;
+    pointer-events:none;
+    z-index:50;
+    background:repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0) 0px,
+      rgba(0,0,0,0) 2px,
+      rgba(0,0,0,0.06) 3px,
+      rgba(0,0,0,0) 4px
+    );
+    opacity:0.5;
+    mix-blend-mode:overlay;
+  }
+
+  .wrap{
+    position:relative;
+    z-index:1;
+    width:100%;
+    max-width:1180px;
+    display:grid;
+    grid-template-columns: 220px 340px 260px;
+    gap:22px;
+    align-items:start;
+    justify-content:center;
+  }
+
+  header.title{
+    grid-column: 1 / -1;
+    text-align:center;
+    margin-bottom:4px;
+  }
+  header.title h1{
+    font-family:'Press Start 2P', monospace;
+    font-size:clamp(20px, 4vw, 34px);
+    letter-spacing:2px;
+    margin:0 0 6px;
+    color:var(--cyan);
+    text-shadow:
+      0 0 6px rgba(62,242,224,0.7),
+      0 0 22px rgba(62,242,224,0.35),
+      3px 3px 0 var(--magenta);
+  }
+  header.title p{
+    margin:0;
+    color:var(--text-muted);
+    font-size:11px;
+    letter-spacing:3px;
+    text-transform:uppercase;
+  }
+
+  .panel{
+    background:linear-gradient(180deg, var(--panel), #0a0e1a);
+    border:1px solid var(--panel-line);
+    border-radius:10px;
+    padding:16px;
+    box-shadow: 0 0 0 1px rgba(62,242,224,0.03), 0 10px 30px rgba(0,0,0,0.45);
+    position:relative;
+  }
+  .panel::before{
+    content:"";
+    position:absolute;
+    top:0; left:14px; right:14px; height:1px;
+    background:linear-gradient(90deg, transparent, rgba(62,242,224,0.5), transparent);
+  }
+
+  .panel h2{
+    font-family:'Press Start 2P', monospace;
+    font-size:10px;
+    letter-spacing:1.5px;
+    color:var(--text-muted);
+    margin:0 0 12px;
+    text-transform:uppercase;
+  }
+  .panel h2 span{ color:var(--magenta); }
+
+  /* LEFT COLUMN: stats + leaderboard */
+  .left-col{ display:flex; flex-direction:column; gap:16px; }
+
+  .stat-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    padding:6px 0;
+    border-bottom:1px dashed var(--grid-line);
+  }
+  .stat-row:last-child{ border-bottom:none; }
+  .stat-label{ font-size:10px; letter-spacing:1.5px; color:var(--text-muted); text-transform:uppercase; }
+  .stat-value{ font-size:18px; font-weight:700; color:var(--cyan); text-shadow:0 0 8px rgba(62,242,224,0.5); }
+
+  .leaderboard-list{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px; }
+  .leaderboard-list li{
+    display:grid;
+    grid-template-columns: 22px 1fr auto;
+    gap:8px;
+    align-items:center;
+    font-size:12px;
+    padding:6px 8px;
+    border-radius:6px;
+    background:rgba(255,255,255,0.02);
+    border:1px solid var(--grid-line);
+  }
+  .leaderboard-list li.rank-1{ border-color:rgba(255,176,32,0.5); box-shadow:0 0 10px rgba(255,176,32,0.12) inset; }
+  .leaderboard-list .rank{ color:var(--amber); font-weight:700; }
+  .leaderboard-list .lname{ color:var(--text); letter-spacing:1px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .leaderboard-list .lscore{ color:var(--cyan); font-weight:700; }
+  .leaderboard-empty{ color:var(--text-muted); font-size:11px; padding:8px 0; }
+
+  /* CENTER: board */
+  .center-col{ display:flex; flex-direction:column; align-items:center; gap:14px; }
+
+  .board-shell{
+    position:relative;
+    border:2px solid var(--panel-line);
+    border-radius:8px;
+    background:#03050a;
+    box-shadow:
+      0 0 0 1px rgba(62,242,224,0.08),
+      0 0 30px rgba(62,242,224,0.06) inset,
+      0 20px 50px rgba(0,0,0,0.6);
+    padding:6px;
+  }
+
+  #board{
+    display:block;
+    background:
+      linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size: 30px 30px;
+    image-rendering: pixelated;
+  }
+
+  .overlay{
+    position:absolute;
+    inset:6px;
+    background:rgba(4,6,12,0.88);
+    backdrop-filter: blur(2px);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:14px;
+    border-radius:6px;
+    text-align:center;
+    padding:20px;
+  }
+  .overlay.hidden{ display:none; }
+  .overlay h3{
+    font-family:'Press Start 2P', monospace;
+    font-size:16px;
+    color:var(--magenta);
+    text-shadow:0 0 12px rgba(255,62,200,0.6);
+    margin:0;
+    letter-spacing:1px;
+  }
+  .overlay p{ color:var(--text-muted); font-size:12px; max-width:220px; margin:0; line-height:1.6; }
+
+  .btn{
+    font-family:'Press Start 2P', monospace;
+    font-size:10px;
+    letter-spacing:1px;
+    padding:12px 18px;
+    border-radius:6px;
+    border:1px solid var(--cyan);
+    background:rgba(62,242,224,0.08);
+    color:var(--cyan);
+    cursor:pointer;
+    transition: all 0.15s ease;
+    text-transform:uppercase;
+  }
+  .btn:hover{ background:rgba(62,242,224,0.18); box-shadow:0 0 16px rgba(62,242,224,0.35); transform:translateY(-1px); }
+  .btn:active{ transform:translateY(0); }
+  .btn.magenta{ border-color:var(--magenta); color:var(--magenta); background:rgba(255,62,200,0.08); }
+  .btn.magenta:hover{ background:rgba(255,62,200,0.18); box-shadow:0 0 16px rgba(255,62,200,0.35); }
+  .btn:disabled{ opacity:0.35; cursor:not-allowed; transform:none; box-shadow:none; }
+
+  .controls-row{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+
+  input.name-input{
+    font-family:'Space Mono', monospace;
+    font-size:16px;
+    letter-spacing:4px;
+    text-align:center;
+    text-transform:uppercase;
+    width:120px;
+    padding:8px;
+    background:#050810;
+    border:1px solid var(--cyan);
+    color:var(--cyan);
+    border-radius:4px;
+  }
+  input.name-input:focus{ outline:none; box-shadow:0 0 10px rgba(62,242,224,0.4); }
+
+  .mobile-controls{ display:none; }
+
+  /* RIGHT COLUMN */
+  .right-col{ display:flex; flex-direction:column; gap:16px; }
+
+  #next-canvas-wrap{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:#03050a;
+    border:1px solid var(--grid-line);
+    border-radius:6px;
+    padding:10px;
+  }
+
+  .key-list{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; }
+  .key-list li{ display:flex; justify-content:space-between; align-items:center; font-size:11px; color:var(--text-muted); }
+  .key-list kbd{
+    font-family:'Space Mono', monospace;
+    background:#050810;
+    border:1px solid var(--grid-line);
+    border-bottom:2px solid var(--violet);
+    color:var(--text);
+    padding:3px 8px;
+    border-radius:4px;
+    font-size:11px;
+    min-width:20px;
+    text-align:center;
+  }
+
+  .status-pill{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    font-size:10px;
+    letter-spacing:1px;
+    color:var(--text-muted);
+    text-transform:uppercase;
+  }
+  .status-dot{ width:7px; height:7px; border-radius:50%; background:var(--text-muted); }
+  .status-dot.live{ background:var(--success); box-shadow:0 0 8px var(--success); }
+  .status-dot.paused{ background:var(--amber); box-shadow:0 0 8px var(--amber); }
+
+  footer{
+    grid-column: 1 / -1;
+    text-align:center;
+    color:var(--text-muted);
+    font-size:10px;
+    letter-spacing:1px;
+    margin-top:10px;
+  }
+
+  @media (max-width: 980px){
+    .wrap{ grid-template-columns: 1fr; justify-items:center; }
+    .left-col, .right-col{ width:100%; max-width:340px; }
+  }
+
+  @media (max-width: 480px){
+    body{ padding:14px 8px 40px; }
+    header.title h1{ font-size:18px; }
+    .mobile-controls{
+      display:grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap:8px;
+      width:100%;
+      max-width:340px;
+    }
+    .mobile-controls button{
+      font-family:'Press Start 2P', monospace;
+      font-size:14px;
+      padding:14px 0;
+      border-radius:8px;
+      border:1px solid var(--panel-line);
+      background:var(--panel);
+      color:var(--cyan);
+    }
+    .mobile-controls button:active{ background:rgba(62,242,224,0.2); }
+  }
+</style>
+</head>
+<body>
+<div class="scanlines"></div>
+
+<div class="wrap">
+  <header class="title">
+    <h1>NEONBLOCKS</h1>
+    <p>a tetromino arcade cabinet, built for the browser</p>
+  </header>
+
+  <!-- LEFT COLUMN -->
+  <div class="left-col">
+    <div class="panel">
+      <h2>Session</h2>
+      <div class="stat-row"><span class="stat-label">Score</span><span class="stat-value" id="score-val">0</span></div>
+      <div class="stat-row"><span class="stat-label">Level</span><span class="stat-value" id="level-val">1</span></div>
+      <div class="stat-row"><span class="stat-label">Lines</span><span class="stat-value" id="lines-val">0</span></div>
+      <div class="stat-row"><span class="stat-label">High Score</span><span class="stat-value" id="highscore-val">0</span></div>
+    </div>
+
+    <div class="panel">
+      <h2><span>&#9733;</span> Top 5 Leaderboard</h2>
+      <ol class="leaderboard-list" id="leaderboard-list"></ol>
+    </div>
+  </div>
+
+  <!-- CENTER COLUMN -->
+  <div class="center-col">
+    <div class="status-pill"><span class="status-dot" id="status-dot"></span><span id="status-text">Ready</span></div>
+
+    <div class="board-shell">
+      <canvas id="board" width="300" height="600"></canvas>
+
+      <div class="overlay" id="start-overlay">
+        <h3>NEONBLOCKS</h3>
+        <p>Clear lines. Chase the high score. Ten wide, twenty tall, zero mercy.</p>
+        <button class="btn" id="start-btn">Start Game</button>
+      </div>
+
+      <div class="overlay hidden" id="pause-overlay">
+        <h3>Paused</h3>
+        <p>Take a breath. Your stack will be right here.</p>
+        <button class="btn" id="resume-btn">Resume</button>
+      </div>
+
+      <div class="overlay hidden" id="gameover-overlay">
+        <h3>Game Over</h3>
+        <p id="final-score-text">Final Score: 0</p>
+        <div id="name-entry" class="hidden" style="display:flex; flex-direction:column; gap:10px; align-items:center;">
+          <p style="color:var(--amber);">New high score! Enter your initials:</p>
+          <input class="name-input" id="name-input" maxlength="8" placeholder="YOU" autocomplete="off">
+          <button class="btn magenta" id="save-score-btn">Save Score</button>
+        </div>
+        <button class="btn" id="restart-btn">Play Again</button>
+      </div>
+    </div>
+
+    <div class="controls-row">
+      <button class="btn" id="pause-btn" disabled>Pause</button>
+      <button class="btn magenta" id="restart-btn-2" disabled>Restart</button>
+    </div>
+
+    <div class="mobile-controls">
+      <button id="m-left">&#8592;</button>
+      <button id="m-rotate">&#8635;</button>
+      <button id="m-right">&#8594;</button>
+      <button id="m-down">&#8595;</button>
+      <button id="m-drop" style="grid-column: 1 / -1;">HARD DROP</button>
+    </div>
+  </div>
+
+  <!-- RIGHT COLUMN -->
+  <div class="right-col">
+    <div class="panel">
+      <h2>Next Piece</h2>
+      <div id="next-canvas-wrap">
+        <canvas id="next" width="120" height="120"></canvas>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Controls</h2>
+      <ul class="key-list">
+        <li><span>Move</span><span><kbd>&#8592;</kbd> <kbd>&#8594;</kbd></span></li>
+        <li><span>Soft Drop</span><kbd>&#8595;</kbd></li>
+        <li><span>Hard Drop</span><kbd>Space</kbd></li>
+        <li><span>Rotate</span><kbd>&#8593;</kbd></li>
+        <li><span>Pause</span><kbd>P</kbd></li>
+      </ul>
+    </div>
+  </div>
+
+  <footer>NEONBLOCKS &mdash; scores saved locally in your browser</footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------- Constants ---------- */
+  const COLS = 10, ROWS = 20, CELL = 30;
+  const LS_LEADERBOARD_KEY = "neonblocks_leaderboard_v1";
+  const LS_HIGHSCORE_KEY = "neonblocks_highscore_v1";
+  const MAX_LEADERBOARD = 5;
+
+  const COLORS = {
+    I: "#3ef2e0",
+    J: "#5c7cff",
+    L: "#ffb020",
+    O: "#ffe14d",
+    S: "#43ffa0",
+    T: "#8a5cff",
+    Z: "#ff3ec8"
+  };
+
+  const SHAPES = {
+    I: [[0,1],[1,1],[2,1],[3,1]],
+    J: [[0,0],[0,1],[1,1],[2,1]],
+    L: [[2,0],[0,1],[1,1],[2,1]],
+    O: [[1,0],[2,0],[1,1],[2,1]],
+    S: [[1,0],[2,0],[0,1],[1,1]],
+    T: [[1,0],[0,1],[1,1],[2,1]],
+    Z: [[0,0],[1,0],[1,1],[2,1]]
+  };
+  // bounding box size per shape (used for rotation pivot)
+  const BOX = { I:4, J:3, L:3, O:2, S:3, T:3, Z:3 };
+
+  const SCORE_TABLE = { 1:100, 2:300, 3:500, 4:800 };
+  const LINES_PER_LEVEL = 10;
+
+  /* ---------- DOM refs ---------- */
+  const boardCanvas = document.getElementById("board");
+  const ctx = boardCanvas.getContext("2d");
+  const nextCanvas = document.getElementById("next");
+  const nctx = nextCanvas.getContext("2d");
+
+  const scoreVal = document.getElementById("score-val");
+  const levelVal = document.getElementById("level-val");
+  const linesVal = document.getElementById("lines-val");
+  const highscoreVal = document.getElementById("highscore-val");
+  const leaderboardList = document.getElementById("leaderboard-list");
+
+  const startOverlay = document.getElementById("start-overlay");
+  const pauseOverlay = document.getElementById("pause-overlay");
+  const gameoverOverlay = document.getElementById("gameover-overlay");
+  const finalScoreText = document.getElementById("final-score-text");
+  const nameEntry = document.getElementById("name-entry");
+  const nameInput = document.getElementById("name-input");
+
+  const startBtn = document.getElementById("start-btn");
+  const resumeBtn = document.getElementById("resume-btn");
+  const restartBtn = document.getElementById("restart-btn");
+  const saveScoreBtn = document.getElementById("save-score-btn");
+  const pauseBtn = document.getElementById("pause-btn");
+  const restartBtn2 = document.getElementById("restart-btn-2");
+
+  const statusDot = document.getElementById("status-dot");
+  const statusText = document.getElementById("status-text");
+
+  /* ---------- State ---------- */
+  let grid, current, next, dropCounter, dropInterval, lastTime;
+  let score, level, lines, gameRunning, gamePaused, animId;
+
+  function emptyGrid(){
+    return Array.from({length: ROWS}, () => Array(COLS).fill(null));
+  }
+
+  function randomPieceType(){
+    const keys = Object.keys(SHAPES);
+    return keys[Math.floor(Math.random()*keys.length)];
+  }
+
+  function makePiece(type){
+    const box = BOX[type];
+    const cells = SHAPES[type].map(([x,y]) => ({x,y}));
+    return {
+      type,
+      cells,
+      box,
+      x: Math.floor((COLS - box) / 2),
+      y: 0
+    };
+  }
+
+  function resetState(){
+    grid = emptyGrid();
+    score = 0;
+    level = 1;
+    lines = 0;
+    dropInterval = 1000;
+    dropCounter = 0;
+    lastTime = 0;
+    current = makePiece(randomPieceType());
+    next = makePiece(randomPieceType());
+    updateHUD();
+  }
+
+  /* ---------- Collision & merge ---------- */
+  function collides(piece, offX, offY, cells){
+    const testCells = cells || piece.cells;
+    for (const c of testCells){
+      const gx = piece.x + c.x + offX;
+      const gy = piece.y + c.y + offY;
+      if (gx < 0 || gx >= COLS || gy >= ROWS) return true;
+      if (gy >= 0 && grid[gy][gx]) return true;
+    }
+    return false;
+  }
+
+  function mergePiece(){
+    for (const c of current.cells){
+      const gx = current.x + c.x;
+      const gy = current.y + c.y;
+      if (gy >= 0) grid[gy][gx] = current.type;
+    }
+  }
+
+  function rotateCells(piece){
+    // rotate around center of bounding box: (x,y) -> (box-1-y, x)
+    const box = piece.box;
+    return piece.cells.map(c => ({ x: box - 1 - c.y, y: c.x }));
+  }
+
+  function tryRotate(){
+    if (current.type === "O") return; // O doesn't rotate
+    const rotated = rotateCells(current);
+    const kicks = [0, -1, 1, -2, 2]; // simple wall-kick attempts
+    for (const k of kicks){
+      if (!collides(current, k, 0, rotated)){
+        current.cells = rotated;
+        current.x += k;
+        return;
+      }
+    }
+  }
+
+  /* ---------- Movement ---------- */
+  function tryMove(dx, dy){
+    if (!collides(current, dx, dy)){
+      current.x += dx;
+      current.y += dy;
+      return true;
+    }
+    return false;
+  }
+
+  function hardDrop(){
+    let dist = 0;
+    while (!collides(current, 0, dist+1)) dist++;
+    current.y += dist;
+    score += dist * 2;
+    lockPiece();
+  }
+
+  function lockPiece(){
+    mergePiece();
+    const cleared = clearLines();
+    if (cleared > 0){
+      lines += cleared;
+      score += (SCORE_TABLE[cleared] || 0) * level;
+      const newLevel = Math.floor(lines / LINES_PER_LEVEL) + 1;
+      if (newLevel !== level){
+        level = newLevel;
+        dropInterval = Math.max(100, 1000 - (level-1)*80);
+      }
+    }
+    current = next;
+    next = makePiece(randomPieceType());
+    updateHUD();
+
+    if (collides(current, 0, 0)){
+      endGame();
+    }
+  }
+
+  function clearLines(){
+    let cleared = 0;
+    for (let y = ROWS-1; y >= 0; y--){
+      if (grid[y].every(cell => cell !== null)){
+        grid.splice(y, 1);
+        grid.unshift(Array(COLS).fill(null));
+        cleared++;
+        y++; // re-check same index after splice
+      }
+    }
+    return cleared;
+  }
+
+  /* ---------- Rendering ---------- */
+  function drawCell(c, x, y, color, alpha){
+    const px = x*CELL, py = y*CELL;
+    c.globalAlpha = alpha !== undefined ? alpha : 1;
+    c.fillStyle = color;
+    c.fillRect(px+1, py+1, CELL-2, CELL-2);
+    c.strokeStyle = "rgba(255,255,255,0.25)";
+    c.lineWidth = 1;
+    c.strokeRect(px+1.5, py+1.5, CELL-3, CELL-3);
+    // glow highlight
+    c.globalAlpha = (alpha !== undefined ? alpha : 1) * 0.5;
+    c.fillStyle = "rgba(255,255,255,0.15)";
+    c.fillRect(px+2, py+2, CELL-4, 4);
+    c.globalAlpha = 1;
+  }
+
+  function ghostY(){
+    let dist = 0;
+    while (!collides(current, 0, dist+1)) dist++;
+    return current.y + dist;
+  }
+
+  function render(){
+    ctx.clearRect(0, 0, boardCanvas.width, boardCanvas.height);
+
+    // locked blocks
+    for (let y = 0; y < ROWS; y++){
+      for (let x = 0; x < COLS; x++){
+        const cell = grid[y][x];
+        if (cell) drawCell(ctx, x, y, COLORS[cell]);
+      }
+    }
+
+    // ghost piece
+    if (gameRunning && !gamePaused){
+      const gy = ghostY();
+      for (const c of current.cells){
+        drawCell(ctx, current.x + c.x, gy + c.y, COLORS[current.type], 0.18);
+      }
+      // active piece
+      for (const c of current.cells){
+        drawCell(ctx, current.x + c.x, current.y + c.y, COLORS[current.type]);
+      }
+    }
+  }
+
+  function renderNext(){
+    nctx.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
+    const cellSize = 24;
+    const box = next.box;
